@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: Razorpay Agentic Commerce API
+  description: API-first orchestration layer for secure, bounded transactions driven by an AI agent.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+paths:
+  /api/catalog:
+    get:
+      summary: Search product inventory
+      description: Semantically search the product inventory based on query parameters.
+      operationId: searchCatalog
+      parameters:
+        - name: query
+          in: query
+          description: Search term or semantic query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of products to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: max_price
+          in: query
+          description: Filter by maximum budget in INR
+          required: false
+          schema:
+            type: integer
+        - name: in_stock
+          in: query
+          description: Filter for products that are currently in stock
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/checkout/intent:
+    post:
+      summary: Create purchase intent
+      description: Accepts a proposed purchase payload from an AI agent. The amount is strictly validated to ensure it does not exceed 5000.
+      operationId: createPurchaseIntent
+      requestBody:
+        description: Purchase intent payload from the AI agent
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseIntentRequest'
+      responses:
+        '200':
+          description: Purchase intent validated and accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseIntentResponse'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Purchase intent rejected due to circuit breaker rules (e.g., amount > 5000)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - price
+        - stock
+      properties:
+        id:
+          type: integer
+          description: Unique identifier for the product
+        name:
+          type: string
+          description: Name of the product
+        description:
+          type: string
+          description: Detailed description of the product
+        price:
+          type: integer
+          description: Price of the product (in smallest currency unit, e.g., paise)
+        stock:
+          type: integer
+          description: Available stock quantity
+
+    PurchaseIntentRequest:
+      type: object
+      required:
+        - agentId
+        - items
+      properties:
+        agentId:
+          type: string
+          description: Identifier for the AI agent initiating the request
+        items:
+          type: array
+          description: List of items the agent intends to purchase
+          items:
+            type: object
+            required:
+              - productId
+              - quantity
+              - unitPrice
+            properties:
+              productId:
+                type: integer
+              quantity:
+                type: integer
+                minimum: 1
+              unitPrice:
+                type: integer
+                description: Price per unit expected by the agent
+        totalAmount:
+          type: integer
+          description: Total proposed amount (in smallest currency unit)
+
+    PurchaseIntentResponse:
+      type: object
+      required:
+        - intentId
+        - status
+      properties:
+        intentId:
+          type: string
+          description: Unique identifier for the created intent
+        status:
+          type: string
+          enum: [ACCEPTED, REJECTED]
+        razorpayOrderId:
+          type: string
+          description: The generated Razorpay Order ID (if applicable)
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
